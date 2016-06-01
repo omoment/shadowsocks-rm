@@ -77,8 +77,9 @@ class DbTransfer(object):
         query_sub_in = None
         last_time = time.time()
         for id in dt_transfer.keys():
+            transfer_all = dt_transfer[id] * config.COMBO
             query_sub_when += ' WHEN %s THEN flow_up+%s' % (id, 0) # all in d
-            query_sub_when2 += ' WHEN %s THEN flow_down+%s' % (id, dt_transfer[id] * config.COMBO)
+            query_sub_when2 += ' WHEN %s THEN flow_down+%s' % (id, transfer_all)
             if query_sub_in is not None:
                 query_sub_in += ',%s' % id
             else:
@@ -134,12 +135,12 @@ class DbTransfer(object):
                 selectSQL = "SELECT `ratio` FROM `node` WHERE server='%s'" % config.SERVER_HOST
                 cur.execute(selectSQL)
                 data = cur.fetchone()
-                if data <= 0:
-                    data = 1
-                config.COMBO = data
+                if data[0] <= 0:
+                    data[0] = 1
+                config.COMBO = data[0]
                 cur.close()
                 conn.close()
-                print "server ratio : %s " % data
+                print('The server\'s current ratio %s' % config.COMBO)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -176,7 +177,7 @@ class DbTransfer(object):
     @staticmethod
     def del_server_remove_user_safe(rows):
         users = DbTransfer.manyger_relays_user()
-        print(users)
+        # print(users)
         for user in users:
             userFlag = False
             for row in rows:
@@ -200,9 +201,8 @@ class DbTransfer(object):
                 DbTransfer.get_instance().push_db_all_user()
                 rows = DbTransfer.get_instance().pull_db_all_user()
                 DbTransfer.del_server_out_of_bound_safe(rows)
-                DbTransfer.del_server_remove_user_safe(rows)
+                # DbTransfer.del_server_remove_user_safe(rows)
                 DbTransfer.get_instance().pull_db_node_ratio()
-                print('The server\'s current ratio %s' % config.COMBO)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
