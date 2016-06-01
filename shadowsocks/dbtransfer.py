@@ -54,6 +54,20 @@ class DbTransfer(object):
         cli.close()
         return dt_transfer
 
+    @staticmethod
+    def manyger_relays_user():
+        users = []
+        cli = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        cli.settimeout(2)
+        cli.sendto('rmuser: {}', ('%s' % (config.MANAGE_BIND_IP), config.MANAGE_PORT))
+        while True:
+            data, addr = cli.recvfrom(1500)
+            if data == 'e':
+                break
+            data = json.loads(data)
+            users.append(data['port'])
+        cli.close()
+        return users;
 
     def push_db_all_user(self):
         dt_transfer = self.get_servers_transfer()
@@ -64,7 +78,7 @@ class DbTransfer(object):
         last_time = time.time()
         for id in dt_transfer.keys():
             query_sub_when += ' WHEN %s THEN flow_up+%s' % (id, 0) # all in d
-            query_sub_when2 += ' WHEN %s THEN flow_down+%s' % (id, dt_transfer[id])
+            query_sub_when2 += ' WHEN %s THEN flow_down+%s' % (id, dt_transfer[id] * config.COMBO)
             if query_sub_in is not None:
                 query_sub_in += ',%s' % id
             else:
@@ -75,7 +89,7 @@ class DbTransfer(object):
                     ' END, flow_down = CASE port' + query_sub_when2 + \
                     ' END, lastConnTime = ' + str(int(last_time)) + \
                     ' WHERE port IN (%s)' % query_sub_in
-        # print query_sql
+        print query_sql
         try:
             conn = cymysql.connect(host=config.MYSQL_HOST, port=config.MYSQL_PORT, user=config.MYSQL_USER,
                                    passwd=config.MYSQL_PASS, db=config.MYSQL_DB, charset='utf8')
@@ -95,7 +109,10 @@ class DbTransfer(object):
             conn = cymysql.connect(host=config.MYSQL_HOST, port=config.MYSQL_PORT, user=config.MYSQL_USER,
                                    passwd=config.MYSQL_PASS, db=config.MYSQL_DB, charset='utf8')
             cur = conn.cursor()
-            cur.execute("SELECT port, flow_up, flow_down, transfer, sspwd, enable, method, plan FROM member")
+            selectSQL = "SELECT port, flow_up, flow_down, transfer, sspwd, enable, method FROM member "
+            if config.PRO_NODE == 1:
+                selectSQL += "WHERE plan='VIP'"
+            cur.execute(selectSQL)
             rows = []
             for r in cur.fetchall():
                 rows.append(list(r))
@@ -106,6 +123,28 @@ class DbTransfer(object):
             import traceback
             traceback.print_exc()
             logging.warn('db pull_db_all_user: %s' % e)
+
+    @staticmethod
+    def pull_db_node_ratio():
+        if config.SERVER_HOST != '127.0.0.1':
+            try:
+                conn = cymysql.connect(host=config.MYSQL_HOST, port=config.MYSQL_PORT, user=config.MYSQL_USER,
+                                       passwd=config.MYSQL_PASS, db=config.MYSQL_DB, charset='utf8')
+                cur = conn.cursor()
+                selectSQL = "SELECT `ratio` FROM `node` WHERE server='%s'" % config.SERVER_HOST
+                cur.execute(selectSQL)
+                data = cur.fetchone()
+                if data <= 0:
+                    data = 1
+                config.COMBO = data
+                cur.close()
+                conn.close()
+                print "server ratio : %s " % data
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                logging.warn('db pull_db_node_ratio: %s' % e)
+
 
     @staticmethod
     def del_server_out_of_bound_safe(rows):
@@ -125,19 +164,29 @@ class DbTransfer(object):
                     logging.info('db stop server at port [%s] reason: password or method changed' % (row[0]))
                     print('db stop server at port [%s] reason: password or method changed' % (row[0]))
                     DbTransfer.send_command('remove: {"server_port":%s}' % row[0])
-                if config.PRO_NODE == 1 and row[7] != 'VIP':
-                	logging.info('db stop server at port [%s] reason: not VIP plan' % (row[0]))
-                	print('db stop server at port [%s] reason: not VIP plan' % (row[0]))
-                	DbTransfer.send_command('remove: {"server_port":%s}' % row[0])
             else:
-                if config.PRO_NODE == 1 and row[7] != 'VIP':
-                    continue
                 if row[5] == 1 and row[1] + row[2] < row[3]:
                     logging.info('db start server at port [%s] pass [%s]' % (row[0], row[4]))
                     if row[6] is None:
                     	row[6] = config.SS_METHOD
                     DbTransfer.send_command('add: {"server_port": %s, "password":"%s", "method":"%s"}'% (row[0], row[4], row[6]))
                     print('add: {"server_port": %s, "password":"%s", "method":"%s"}'% (row[0], row[4], row[6]))
+
+
+    @staticmethod
+    def del_server_remove_user_safe(rows):
+        users = DbTransfer.manyger_relays_user()
+        print(users)
+        for user in users:
+            userFlag = False
+            for row in rows:
+                if int(user) == int(row[0]):
+                    userFlag = True
+                    break
+            if userFlag == False:
+                print('db stop server at port [%s] reason: not VIP or delete' % (user))
+                DbTransfer.send_command('remove: {"server_port":%s}' % user)   
+
 
     @staticmethod
     def thread_db():
@@ -151,12 +200,15 @@ class DbTransfer(object):
                 DbTransfer.get_instance().push_db_all_user()
                 rows = DbTransfer.get_instance().pull_db_all_user()
                 DbTransfer.del_server_out_of_bound_safe(rows)
+                DbTransfer.del_server_remove_user_safe(rows)
+                DbTransfer.get_instance().pull_db_node_ratio()
+                print('The server\'s current ratio %s' % config.COMBO)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 logging.warn('db thread except:%s' % e)
             finally:
-                time.sleep(15)
+                time.sleep(8)
 
 
 #SQLData.pull_db_all_user()

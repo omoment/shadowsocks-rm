@@ -102,6 +102,8 @@ class Manager(object):
             u.close(next_tick=False)
             del self._relays[port]
         else:
+            print("server not exist at %s:%d" % (config['server'],
+                                                         port))
             logging.error("server not exist at %s:%d" % (config['server'],
                                                          port))
 
@@ -124,6 +126,8 @@ class Manager(object):
                 a_config = self._config.copy()
                 if command == 'transfer':
                     self.handle_periodic()
+                elif command == 'rmuser':
+                    self.stat_all_port()
                 else:
                     if config:
                         # let the command override the configuration file
@@ -167,6 +171,16 @@ class Manager(object):
 
     def stat_callback(self, port, data_len):
         self._statistics[port] += data_len
+
+    def stat_all_port(self):
+        r = {}
+        i = 0
+
+        for k in self._relays:
+            self._send_control_data(b'{"port":%s}' % (k))
+        
+        self._send_control_data('e')
+        self._statistics.clear()
 
     def handle_periodic(self):
         r = {}

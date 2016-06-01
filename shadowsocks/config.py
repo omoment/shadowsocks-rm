@@ -1,14 +1,19 @@
 import logging
 
 #Config
-MYSQL_HOST = 'mengsky.net'
+MYSQL_HOST = 'db.shadowsocks.org'
 MYSQL_PORT = 3306
 MYSQL_USER = 'root'
 MYSQL_PASS = 'root'
-MYSQL_DB = 'shadowsocks'
+MYSQL_DB = 'sspanel'
 
 # Pro node 1 true , others false
-PRO_NODE = 0
+PRO_NODE = 1
+
+# comno , transfer diff * 5
+COMBO = 1
+# Panel Server.
+SERVER_HOST = '127.0.0.1'
 
 MANAGE_PASS = 'passwd'
 #if you want manage in other server you should set this value to global ip
@@ -24,6 +29,6 @@ SS_METHOD = 'rc4-md5'
 
 #LOG CONFIG
 LOG_ENABLE = False
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.ERROR
 LOG_FILE = '/var/log/shadowsocks.log'
 
