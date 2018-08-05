@@ -74,3 +74,4 @@ Database user table column
 
 `transfer` if flow_up + flow_down > transfer this server will be stop (db_transfer.py del_server_out_of_bound_safe)
 
+https://lala.im/310.html
